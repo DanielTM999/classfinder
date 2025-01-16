@@ -11,4 +11,6 @@ public interface ClassFinder {
     Set<Class<?>> find(Class<?> mainClass, ClassFinderConfigurations configurations);
     Set<Class<?>> find(Package mainPackage, ClassFinderConfigurations configurations);
     Set<Class<?>> find(String packageName, ClassFinderConfigurations configurations);  
+    void loadByDirectory(String path);
+    Set<Class<?>> getLoadedClass();
 }
