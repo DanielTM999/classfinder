@@ -7,6 +7,7 @@ import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -89,8 +90,7 @@ public class ClassFinderService implements ClassFinder {
     @Override
     public Set<Class<?>> find(String packageName, ClassFinderConfigurations configurations) {
         try {
-            this.classesLoaded.addAll(encontrarClassesNoPacote(packageName, configurations));
-            return this.classesLoaded;
+            return encontrarClassesNoPacote(packageName, configurations);
         } catch (Exception e) {
             return new HashSet<>();
         }
@@ -103,14 +103,13 @@ public class ClassFinderService implements ClassFinder {
         if (rootDir.exists() && rootDir.isDirectory()) {
             for (File file : rootDir.listFiles()) {
                 if (file.isDirectory()) {
-                    findClassByDir(file);
+                    findClassByDir(file, rootDir);
                 } else if (file.isFile()) {
                     String fileName = file.getName();
-                    loadClass(fileName, file);
+                    loadClass(fileName, file, rootDir);
                 }
             }
         }
-
     }
 
     @Override
@@ -118,28 +117,28 @@ public class ClassFinderService implements ClassFinder {
         return this.classesLoaded;
     }
 
-    public void findClassByDir(File rootDir) {
-        if (rootDir.exists() && rootDir.isDirectory()) {
-            for (File file : rootDir.listFiles()) {
+    public void findClassByDir(File dir,File rootDir) {
+        if (dir.exists() && dir.isDirectory()) {
+            for (File file : dir.listFiles()) {
                 if (file.isDirectory()) {
-                    findClassByDir(file);
+                    findClassByDir(file, rootDir);
                 } else if (file.isFile()) {
                     String fileName = file.getName();
-                    loadClass(fileName, file);
+                    loadClass(fileName, file, rootDir);
                 }
             }
         }
     }
 
-    public void loadClass(String path, File file) {
+    public void loadClass(String path, File file, File rootDir) {
         if (path.endsWith(".class")) {
-            loadClassFromClassFile(file);
+            loadClassFromClassFile(file, rootDir);
         } else if (path.endsWith(".jar")) {
             loadClassesFromJar(file);
         }
     }
 
-    public void loadClassFromClassFile(File file) {
+    public void loadClassFromClassFile(File file, File rootDir) {
         try {
             File parentDir = file.getParentFile();
             if (parentDir == null) {
@@ -148,11 +147,20 @@ public class ClassFinderService implements ClassFinder {
 
             URL url = parentDir.toURI().toURL();
 
-            try (URLClassLoader classLoader = new URLClassLoader(new URL[] { url }, getClass().getClassLoader())) {
-                String className = file.getName().replace(".class", "");
-                classLoader.loadClass(className);
-            } catch (Exception e) {
-                throw e;
+            List<String> classNames = getPossibleClassNamesFromFile(file, rootDir);
+
+            for(String className : classNames){
+                try {
+                    Class<?> clazz = Class.forName(className, false, getClass().getClassLoader());
+                    this.classesLoaded.add(clazz);
+                } catch (ClassNotFoundException e) {
+                    try (URLClassLoader classLoader = new URLClassLoader(new URL[]{url}, getClass().getClassLoader())) {
+                        Class<?> clazz = classLoader.loadClass(className);
+                        this.classesLoaded.add(clazz);
+                    }catch(ClassNotFoundException | NoClassDefFoundError loadException){
+                        
+                    }
+                }
             }
 
         } catch (Exception e) {
@@ -168,14 +176,40 @@ public class ClassFinderService implements ClassFinder {
                 JarEntry entry = entries.nextElement();
                 if (entry.getName().endsWith(".class")) {
                     String className = entry.getName().replace('/', '.').replace(".class", "");
-                    Class<?> clazz = classLoader.loadClass(className);
-                    this.classesLoaded.add(clazz);
+                    try {
+                        Class<?> clazz = classLoader.loadClass(className);
+                        this.classesLoaded.add(clazz);
+                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                        
+                    }
                 }
             }
 
         } catch (Exception e) {
             executeHandler(e);
         }
+    }
+
+    private List<String> getPossibleClassNamesFromFile(File file, File rootDir) {
+        List<String> names = new ArrayList<>();
+        File currentDir = file.getParentFile();
+        String filePath = file.getAbsolutePath();
+    
+        while (currentDir != null && !currentDir.equals(rootDir)) {
+            String basePath = currentDir.getAbsolutePath();
+    
+            if (filePath.startsWith(basePath)) {
+                String relativePath = filePath.substring(basePath.length() + 1, filePath.length() - 6);
+    
+                String className = relativePath.replace(File.separatorChar, '.');
+    
+                names.add(className);
+            }
+    
+            currentDir = currentDir.getParentFile();
+        }
+    
+        return names;
     }
 
     private Set<Class<?>> encontrarClassesNoPacote(String pacote, ClassFinderConfigurations configurations) {
