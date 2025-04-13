@@ -1,5 +1,6 @@
 /.vscode
 /target
+/.idea
 /Teste.java
 /driver
 /src\main\java\dtm\discovery/Teste.java
