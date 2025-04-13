@@ -2,7 +2,7 @@ package dtm.discovery.core;
 
 import java.util.Set;
 
-public interface ClassFinder {
+public interface ClassFinder extends AutoCloseable {
     Set<Class<?>> find();
     Set<Class<?>> find(ClassFinderConfigurations configurations);
     Set<Class<?>> find(Class<?> mainClass);

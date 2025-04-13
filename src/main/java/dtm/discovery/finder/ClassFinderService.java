@@ -7,12 +7,11 @@ import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
@@ -20,19 +19,21 @@ import dtm.discovery.core.ClassFinder;
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.ClassFinderErrorHandler;
 
-public class ClassFinderService implements ClassFinder {
-
+public class ClassFinderService implements ClassFinder, AutoCloseable {
+    private final Map<File, URLClassLoader> cachedClassLoaders;
     private ClassFinderErrorHandler handlers;
     private Class<? extends Annotation> annotationFilter;
-    private Set<Class<?>> classesLoaded;
+    private final Set<Class<?>> classesLoaded;
 
     public ClassFinderService() {
-        this.classesLoaded = new HashSet<>();
+        this.classesLoaded = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        this.cachedClassLoaders = new ConcurrentHashMap<>();
     }
 
     public ClassFinderService(ClassFinderErrorHandler handlers) {
         this.handlers = handlers;
-        this.classesLoaded = new HashSet<>();
+        this.classesLoaded = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        this.cachedClassLoaders = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -99,17 +100,24 @@ public class ClassFinderService implements ClassFinder {
     @Override
     public void loadByDirectory(String path) {
         File rootDir = new File(path);
+        List<CompletableFuture<Void>> tasks = new ArrayList<>();
 
         if (rootDir.exists() && rootDir.isDirectory()) {
-            for (File file : rootDir.listFiles()) {
-                if (file.isDirectory()) {
-                    findClassByDir(file, rootDir);
-                } else if (file.isFile()) {
-                    String fileName = file.getName();
-                    loadClass(fileName, file, rootDir);
+            try(ExecutorService executor = Executors.newCachedThreadPool()){
+                for (File file : rootDir.listFiles()) {
+                    tasks.add(CompletableFuture.runAsync(() -> {
+                        if (file.isDirectory()) {
+                            findClassByDir(file, rootDir);
+                        } else if (file.isFile()) {
+                            String fileName = file.getName();
+                            loadClass(fileName, file, rootDir);
+                        }
+                    }, executor));
                 }
             }
         }
+
+        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
     }
 
     @Override
@@ -117,7 +125,17 @@ public class ClassFinderService implements ClassFinder {
         return this.classesLoaded;
     }
 
-    public void findClassByDir(File dir,File rootDir) {
+    @Override
+    public void close() throws Exception {
+        for (URLClassLoader cl : cachedClassLoaders.values()) {
+            try {
+                cl.close();
+            } catch (IOException ignored) {}
+        }
+        cachedClassLoaders.clear();
+    }
+
+    public void findClassByDir(File dir, File rootDir) {
         if (dir.exists() && dir.isDirectory()) {
             for (File file : dir.listFiles()) {
                 if (file.isDirectory()) {
@@ -129,6 +147,7 @@ public class ClassFinderService implements ClassFinder {
             }
         }
     }
+
 
     public void loadClass(String path, File file, File rootDir) {
         if (path.endsWith(".class")) {
@@ -145,8 +164,6 @@ public class ClassFinderService implements ClassFinder {
                 throw new IOException("Erro: Caminho inválido.");
             }
 
-            URL url = parentDir.toURI().toURL();
-
             List<String> classNames = getPossibleClassNamesFromFile(file, rootDir);
 
             for(String className : classNames){
@@ -154,12 +171,11 @@ public class ClassFinderService implements ClassFinder {
                     Class<?> clazz = Class.forName(className, false, getClass().getClassLoader());
                     this.classesLoaded.add(clazz);
                 } catch (ClassNotFoundException e) {
-                    try (URLClassLoader classLoader = new URLClassLoader(new URL[]{url}, getClass().getClassLoader())) {
+                    URLClassLoader classLoader = getClassLoaderForFile(file);
+                    try {
                         Class<?> clazz = classLoader.loadClass(className);
                         this.classesLoaded.add(clazz);
-                    }catch(ClassNotFoundException | NoClassDefFoundError loadException){
-                        
-                    }
+                    }catch(ClassNotFoundException | NoClassDefFoundError ignored){}
                 }
             }
 
@@ -170,19 +186,18 @@ public class ClassFinderService implements ClassFinder {
 
     private void loadClassesFromJar(File jar) {
         try (JarFile jarFile = new JarFile(jar)) {
-            Enumeration<JarEntry> entries = jarFile.entries();
-            URLClassLoader classLoader = URLClassLoader.newInstance(new URL[] { jar.toURI().toURL() });
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                if (entry.getName().endsWith(".class")) {
-                    String className = entry.getName().replace('/', '.').replace(".class", "");
-                    try {
-                        Class<?> clazz = classLoader.loadClass(className);
-                        this.classesLoaded.add(clazz);
-                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
-                        
-                    }
-                }
+            List<JarEntry> entries = Collections.list(jarFile.entries());
+            try(URLClassLoader classLoader = URLClassLoader.newInstance(new URL[] { jar.toURI().toURL() })){
+
+                entries.parallelStream()
+                        .filter(entry -> entry.getName().endsWith(".class"))
+                        .forEach(entry -> {
+                            String className = entry.getName().replace('/', '.').replace(".class", "");
+                            try {
+                                Class<?> clazz = classLoader.loadClass(className);
+                                this.classesLoaded.add(clazz);
+                            } catch (ClassNotFoundException | NoClassDefFoundError ignored) {}
+                        });
             }
 
         } catch (Exception e) {
@@ -405,6 +420,21 @@ public class ClassFinderService implements ClassFinder {
         } else {
             classes.add(clazz);
         }
+    }
+
+    private URLClassLoader getClassLoaderForFile(File file) throws IOException {
+        File parentDir = file.getParentFile();
+        if (parentDir == null) throw new IOException("Diretório pai inválido.");
+
+        return cachedClassLoaders.computeIfAbsent(parentDir, dir -> {
+            try {
+                URL url = dir.toURI().toURL();
+                return new URLClassLoader(new URL[]{url}, getClass().getClassLoader());
+            } catch (IOException e) {
+                executeHandler(e);
+                return null;
+            }
+        });
     }
 
 }
