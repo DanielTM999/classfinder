@@ -17,19 +17,16 @@ import dtm.discovery.core.ClassFinderErrorHandler;
 import dtm.discovery.core.Processor;
 
 public class ClassFinderService implements ClassFinder, AutoCloseable {
-    private final Map<File, URLClassLoader> cachedClassLoaders;
     private ClassFinderErrorHandler handlers;
     private final Set<Class<?>> classesLoaded;
 
     public ClassFinderService() {
         this.classesLoaded = ConcurrentHashMap.newKeySet();
-        this.cachedClassLoaders = new ConcurrentHashMap<>();
     }
 
     public ClassFinderService(ClassFinderErrorHandler handlers) {
         this.handlers = handlers;
         this.classesLoaded = ConcurrentHashMap.newKeySet();
-        this.cachedClassLoaders = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -94,7 +91,7 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
     @Override
     public Set<Class<?>> loadByDirectory(String path) {
         File rootDir = new File(path);
-        Processor processor = new SimpleDirectoryProcessor(rootDir);
+        Processor processor = new SimpleDirectoryProcessor(rootDir, classesLoaded);
         return new HashSet<>();
     }
 
@@ -105,13 +102,8 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        for (URLClassLoader cl : cachedClassLoaders.values()) {
-            try {
-                cl.close();
-            } catch (IOException ignored) {}
-        }
-        cachedClassLoaders.clear();
         handlers = null;
+        this.classesLoaded.clear();
     }
 
     private Set<Class<?>> encontrarClassesNoPacote(String pacote, ClassFinderConfigurations configurations) {

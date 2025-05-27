@@ -41,11 +41,11 @@ public class ClasspathProcessor implements Processor {
     public void execute() throws Exception{
         List<String> jarPaths = Arrays.stream(classpath.split(";"))
                 .filter(pathJar -> pathJar.endsWith(".jar"))
+                .filter(jarPath -> !ignore(jarPath))
                 .toList();
 
         for (String jarPath : jarPaths){
             if(jarProcessed.add(jarPath)){
-                if(ignore(jarPath)) continue;
                 File file = new File(jarPath);
                 URL jarUrl = file.toURI().toURL();
                 Processor processor = new JarProcessor(jarUrl, processedClasses, jarProcessed, packageName, configurations);
