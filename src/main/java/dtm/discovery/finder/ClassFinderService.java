@@ -91,8 +91,18 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
     @Override
     public Set<Class<?>> loadByDirectory(String path) {
         File rootDir = new File(path);
-        Processor processor = new SimpleDirectoryProcessor(rootDir, classesLoaded);
-        return new HashSet<>();
+        Set<Class<?>> classes = ConcurrentHashMap.newKeySet();
+        try{
+            Processor processor = new SimpleDirectoryProcessor(rootDir, classes);
+
+            processor.onError(this::executeHandler);
+            processor.execute();
+
+            this.classesLoaded.addAll(classes);
+        }catch (Exception e){
+            executeHandler(e);
+        }
+        return classes;
     }
 
     @Override

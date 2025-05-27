@@ -59,7 +59,13 @@ public class SimpleDirectoryProcessor implements Processor {
         if (path.endsWith(".class")) {
             loadClassFromClassFile(file, root);
         } else if (path.endsWith(".jar")) {
-
+           try{
+               Processor processor = new SimpleJarProcessor(processedClasses, file);
+               processor.onError(errorAction);
+               processor.execute();
+           }catch (Exception e){
+               errorAction.accept(e);
+           }
         }
     }
 
