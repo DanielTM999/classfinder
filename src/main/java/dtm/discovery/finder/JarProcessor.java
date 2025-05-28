@@ -74,8 +74,8 @@ public class JarProcessor implements Processor {
                 }else if(entryName.endsWith(".jar")){
                     if (!configurations.ignoreSubJars()) {
                         String jarInternalPath = "jar:file:" + jarUrl.getFile().replace("\\", "/") + "!/" + entryName;
-
                         String decodedPath = URLDecoder.decode(jarInternalPath, StandardCharsets.UTF_8);
+                        if (ignoreJar(decodedPath)) return;
                         URL jarUrlInternal = URI.create(decodedPath).toURL();
                         String jarKey = jarUrlInternal.toExternalForm();
                         if (jarProcessed.add(jarKey)) {
@@ -118,6 +118,14 @@ public class JarProcessor implements Processor {
         return configurations.getIgnorePackges()
                 .stream()
                 .anyMatch(className::startsWith);
+    }
+
+    private boolean ignoreJar(String jarPath){
+        String lowerJarPath = jarPath.toLowerCase();
+        return configurations.getIgnoreJarsTerms()
+                .stream()
+                .map(String::toLowerCase)
+                .anyMatch(lowerJarPath::contains);
     }
 
 }
