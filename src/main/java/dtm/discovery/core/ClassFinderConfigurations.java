@@ -13,7 +13,7 @@ public interface ClassFinderConfigurations {
     }
 
     default boolean getAnonimousClass(){
-        return false;
+        return true;
     }
 
     default ClassFinderErrorHandler getHandler(){

@@ -43,7 +43,6 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
                 String callingClassName = stackTraceElement.getClassName();
                 try {
                     callingClass = Class.forName(callingClassName);
-                    find(callingClass);
                 } catch (ClassNotFoundException e) {
                     executeHandler(e);
                 }
@@ -127,10 +126,9 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
         List<CompletableFuture<?>> tasks = new ArrayList<>();
 
         try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()){
-            Enumeration<URL> resources = getResourcesEnumeration(path);
-
-            while (resources.hasMoreElements()){
-                final URL resource = resources.nextElement();
+            Enumeration<URL> resourcesEnumeration = getResourcesEnumeration(path);
+            while (resourcesEnumeration.hasMoreElements()){
+                final URL resource = resourcesEnumeration.nextElement();
                 final String protocol = resource.getProtocol();
 
                 tasks.add(CompletableFuture.runAsync(() -> {
@@ -176,7 +174,6 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
                     return null;
                 }));
             }
-
             CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
 
             if(atomicBoolean.get()){
@@ -188,7 +185,6 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
         } catch (Exception e) {
             executeHandler(e);
         }
-
         classesLoaded.addAll(classes);
         return classes;
     }
@@ -216,7 +212,6 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
         ClassLoader classLoader = clazz.getClassLoader();
         return classLoader.getResources(path);
     }
-
 
     private URL getJarByUrl(URL resource) throws Exception{
         String path = resource.getPath();

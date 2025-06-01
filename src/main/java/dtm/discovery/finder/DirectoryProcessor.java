@@ -18,7 +18,7 @@ public class DirectoryProcessor implements Processor {
     private final String packageName;
     private final Set<Class<?>> processedClasses;
     private final ClassFinderConfigurations configurations;
-
+    private final ExecutorService executorService;
     private Consumer<Throwable> errorAction = e -> {};
 
     public DirectoryProcessor(
@@ -31,12 +31,14 @@ public class DirectoryProcessor implements Processor {
         this.packageName = packageName;
         this.processedClasses = processedClasses;
         this.configurations = configurations;
+        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Override
     public void execute() throws Exception{
         if (root == null || !root.isDirectory()) return;
         recusiveSearch(root, packageName);
+        executorService.shutdown();
     }
 
     @Override
@@ -49,7 +51,7 @@ public class DirectoryProcessor implements Processor {
 
         File[] files = directory.listFiles();
         if (files == null) files = new File[0];
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        try  {
             List<CompletableFuture<Void>> futures = new ArrayList<>();
             for (File file : files) {
                 futures.add(CompletableFuture.runAsync(() -> {
@@ -66,10 +68,12 @@ public class DirectoryProcessor implements Processor {
                     } catch (Exception e) {
                         errorAction.accept(e);
                     }
-                }, executor));
+                }, executorService));
             }
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        }catch (Exception e){
+            errorAction.accept(e);
         }
 
     }
@@ -83,6 +87,5 @@ public class DirectoryProcessor implements Processor {
             processedClasses.add(clazz);
         }
     }
-
 
 }
