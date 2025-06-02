@@ -89,6 +89,11 @@ public class ClassFinderService implements ClassFinder, AutoCloseable {
 
     @Override
     public Set<Class<?>> loadByDirectory(String path) {
+        return loadByDirectory(path, null);
+    }
+
+    @Override
+    public Set<Class<?>> loadByDirectory(String path, ClassFinderConfigurations configurations) {
         File rootDir = new File(path);
         Set<Class<?>> classes = ConcurrentHashMap.newKeySet();
         try{

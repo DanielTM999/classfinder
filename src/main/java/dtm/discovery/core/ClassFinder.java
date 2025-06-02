@@ -13,6 +13,7 @@ public interface ClassFinder extends AutoCloseable {
     Set<Class<?>> find(String packageName, ClassFinderConfigurations configurations);
 
     Set<Class<?>> loadByDirectory(String path);
+    Set<Class<?>> loadByDirectory(String path, ClassFinderConfigurations configurations);
 
     Set<Class<?>> getLoadedClasses();
 }
