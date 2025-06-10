@@ -25,6 +25,7 @@ public interface ClassFinderConfigurations {
     }
 
     default boolean ignoreSubJars(){return true;}
+    default boolean ignoreMainJar(){return false;}
 
     default List<String> getIgnorePackges(){
         return new ArrayList<>(List.of("sun", "com.sun", "jdk.internal", "lombok"));

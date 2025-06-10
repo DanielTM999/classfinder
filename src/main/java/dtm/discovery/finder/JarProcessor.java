@@ -45,7 +45,7 @@ public class JarProcessor implements Processor {
 
     @Override
     public void execute() throws Exception{
-        CompletableFuture<Void> future = encontrarClassesNoPacoteDentroDoJar(jarUrl, packageName);
+        CompletableFuture<Void> future = encontrarClassesNoPacoteDentroDoJar(jarUrl, packageName, true);
         future.join();
         executorService.shutdown();
     }
@@ -55,7 +55,7 @@ public class JarProcessor implements Processor {
         if(action != null) this.errorAction = action;
     }
 
-    private CompletableFuture<Void> encontrarClassesNoPacoteDentroDoJar(URL jarUrl, String pacote) {
+    private CompletableFuture<Void> encontrarClassesNoPacoteDentroDoJar(URL jarUrl, String pacote, boolean ismainJar) {
         try(JarFile jarFile = new JarFile(jarUrl.getFile())) {
             Enumeration<JarEntry> entries = jarFile.entries();
             List<CompletableFuture<?>> localTasks = new ArrayList<>();
@@ -77,14 +77,14 @@ public class JarProcessor implements Processor {
                                 }
                             }
                         } else if(entryName.endsWith(".jar")) {
-                            if (!configurations.ignoreSubJars()) {
+                            if (!configurations.ignoreSubJars() || (ismainJar && !configurations.ignoreMainJar())) {
                                 String jarInternalPath = "jar:file:" + jarUrl.getFile().replace("\\", "/") + "!/" + entryName;
                                 String decodedPath = URLDecoder.decode(jarInternalPath, StandardCharsets.UTF_8);
                                 if (ignoreJar(decodedPath)) return;
                                 URL jarUrlInternal = URI.create(decodedPath).toURL();
                                 String jarKey = jarUrlInternal.toExternalForm();
                                 if (jarProcessed.add(jarKey)) {
-                                    CompletableFuture<?> subJarFuture = encontrarClassesNoPacoteDentroDoJar(jarUrlInternal, pacote);
+                                    CompletableFuture<?> subJarFuture = encontrarClassesNoPacoteDentroDoJar(jarUrlInternal, pacote, false);
                                     subJarFutures.add(subJarFuture);
                                 }
                             }
