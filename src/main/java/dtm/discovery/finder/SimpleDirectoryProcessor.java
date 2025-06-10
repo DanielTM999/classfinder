@@ -29,10 +29,13 @@ public class SimpleDirectoryProcessor implements Processor {
 
     @Override
     public void execute() throws Exception {
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
+        List<CompletableFuture<Void>> allTasks = new ArrayList<>();
+
         if (root.exists() && root.isDirectory()) {
-            search(root.listFiles());
+            search(root.listFiles(), allTasks);
         }
+
+        CompletableFuture.allOf(allTasks.toArray(new CompletableFuture[0])).join();
         executor.shutdown();
     }
 
@@ -41,16 +44,13 @@ public class SimpleDirectoryProcessor implements Processor {
         if(action != null) this.errorAction = action;
     }
 
-    private void search(File[] files){
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
+    private void search(File[] files, List<CompletableFuture<Void>> tasks){
         for (File file : files){
-            tasks.add(CompletableFuture.runAsync(() -> {
-                if(file.isFile()){
-                    loadFile(file);
-                }else if(file.isDirectory()){
-                    search(file.listFiles());
-                }
-            }, executor));
+            if (file.isDirectory()) {
+                search(file.listFiles(), tasks);
+            } else {
+                tasks.add(CompletableFuture.runAsync(() -> loadFile(file), executor));
+            }
         }
     }
 

@@ -124,12 +124,14 @@ public class SimpleJarProcessor implements Processor {
     }
 
     private boolean ignore(String className){
+        if(configurations == null) return false;
         return configurations.getIgnorePackges()
                 .stream()
                 .anyMatch(className::startsWith);
     }
 
     private boolean ignoreJar(String jarPath){
+        if(configurations == null) return false;
         String lowerJarPath = jarPath.toLowerCase();
         return configurations.getIgnoreJarsTerms()
                 .stream()

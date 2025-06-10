@@ -44,6 +44,8 @@ public class ClasspathProcessor implements Processor {
                 .filter(jarPath -> !ignore(jarPath))
                 .toList();
 
+        if(configurations.ignoreSubJars()) return;
+
         for (String jarPath : jarPaths){
             if(jarProcessed.add(jarPath)){
                 File file = new File(jarPath);

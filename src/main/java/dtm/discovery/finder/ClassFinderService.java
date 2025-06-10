@@ -16,7 +16,7 @@ import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.ClassFinderErrorHandler;
 import dtm.discovery.core.Processor;
 
-public class ClassFinderService implements ClassFinder, AutoCloseable {
+public class ClassFinderService implements ClassFinder {
     private ClassFinderErrorHandler handlers;
     private final Set<Class<?>> classesLoaded;
 
