@@ -4,6 +4,7 @@ import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -26,6 +27,8 @@ public class SimpleJarProcessor implements Processor {
     private final ClassFinderConfigurations configurations;
     private final Set<String> jarProcessed;
     private Consumer<Throwable> errorAction = e -> {};
+    private final List<URLClassLoader> classLoadersToClose = Collections.synchronizedList(new ArrayList<>());
+
 
     public SimpleJarProcessor(Set<Class<?>> processedClasses, File jarFile) {
         this.processedClasses = processedClasses;
@@ -48,6 +51,14 @@ public class SimpleJarProcessor implements Processor {
         URL jarUrl = this.jarFile.toURI().toURL();
         CompletableFuture<Void> future = scanJar(jarUrl);
         future.join();
+        for (URLClassLoader loader : classLoadersToClose) {
+            try {
+                loader.close();
+            } catch (IOException e) {
+                errorAction.accept(e);
+            }
+        }
+        classLoadersToClose.clear();
         executorService.shutdown();
     }
 
@@ -59,8 +70,9 @@ public class SimpleJarProcessor implements Processor {
     private CompletableFuture<Void> scanJar(final URL jarUrl){
         try(
                 JarFile jarFile = new JarFile(jarUrl.getFile());
-                URLClassLoader classLoader = URLClassLoader.newInstance(new URL[] { jarUrl });
         ){
+            URLClassLoader classLoader = URLClassLoader.newInstance(new URL[] { jarUrl });
+            classLoadersToClose.add(classLoader);
             Enumeration<JarEntry> entries = jarFile.entries();
             List<CompletableFuture<?>> localTasks = new ArrayList<>();
             List<CompletableFuture<?>> subJarFutures = new ArrayList<>();
