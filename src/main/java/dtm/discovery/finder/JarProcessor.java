@@ -80,7 +80,7 @@ public class JarProcessor implements Processor {
                             if (!configurations.ignoreSubJars() || (ismainJar && !configurations.ignoreMainJar())) {
                                 String jarInternalPath = "jar:file:" + jarUrl.getFile().replace("\\", "/") + "!/" + entryName;
                                 String decodedPath = URLDecoder.decode(jarInternalPath, StandardCharsets.UTF_8);
-                                if (ignoreJar(decodedPath)) return;
+                                if (ignoreJar(decodedPath, ismainJar)) return;
                                 URL jarUrlInternal = URI.create(decodedPath).toURL();
                                 String jarKey = jarUrlInternal.toExternalForm();
                                 if (jarProcessed.add(jarKey)) {
@@ -138,8 +138,11 @@ public class JarProcessor implements Processor {
                 .anyMatch(className::startsWith);
     }
 
-    private boolean ignoreJar(String jarPath){
+    private boolean ignoreJar(String jarPath, boolean isMainJar){
         String lowerJarPath = jarPath.toLowerCase();
+        
+        if(isMainJar && !configurations.ignoreMainJar()) return false;
+
         return configurations.getIgnoreJarsTerms()
                 .stream()
                 .map(String::toLowerCase)
