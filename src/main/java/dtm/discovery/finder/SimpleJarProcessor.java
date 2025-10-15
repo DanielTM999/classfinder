@@ -2,6 +2,7 @@ package dtm.discovery.finder;
 
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
+import dtm.discovery.stereotips.ClassFinderStereotips;
 
 import java.io.File;
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -27,6 +29,7 @@ public class SimpleJarProcessor implements Processor {
     private final ClassFinderConfigurations configurations;
     private final Set<String> jarProcessed;
     private Consumer<Throwable> errorAction = e -> {};
+    private Predicate<ClassFinderStereotips> acept;
     private final List<URLClassLoader> classLoadersToClose = Collections.synchronizedList(new ArrayList<>());
 
 
@@ -67,7 +70,23 @@ public class SimpleJarProcessor implements Processor {
         if(action != null) this.errorAction = action;
     }
 
+    @Override
+    public void acept(Predicate<ClassFinderStereotips> acept) {
+        this.acept = (acept != null) ? acept : (e) -> true;
+    }
+
     private CompletableFuture<Void> scanJar(final URL jarUrl){
+        if(!acept.test(new ClassFinderStereotips() {
+            @Override
+            public URL getArchiverUrl() {
+                return jarUrl;
+            }
+
+            @Override
+            public StereotipsProtocols getArchiverProtocol() {
+                return StereotipsProtocols.JAR;
+            }
+        }))return CompletableFuture.completedFuture(null);
         try(
                 JarFile jarFile = new JarFile(jarUrl.getFile());
         ){

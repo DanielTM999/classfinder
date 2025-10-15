@@ -2,6 +2,7 @@ package dtm.discovery.finder;
 
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
+import dtm.discovery.stereotips.ClassFinderStereotips;
 
 import java.io.File;
 import java.net.URI;
@@ -14,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -24,6 +26,7 @@ public class JarProcessor implements Processor {
     private final Set<Class<?>> processedClasses;
     private final Set<String> jarProcessed;
     private final ClassFinderConfigurations configurations;
+    private Predicate<ClassFinderStereotips> acept;
     private final String packageName;
     private Consumer<Throwable> errorAction = e -> {};
 
@@ -55,7 +58,24 @@ public class JarProcessor implements Processor {
         if(action != null) this.errorAction = action;
     }
 
+    @Override
+    public void acept(Predicate<ClassFinderStereotips> acept) {
+        this.acept = (acept != null) ? acept : (e) -> true;
+    }
+
     private CompletableFuture<Void> encontrarClassesNoPacoteDentroDoJar(URL jarUrl, String pacote, boolean ismainJar) {
+        if(!acept.test(new ClassFinderStereotips() {
+            @Override
+            public URL getArchiverUrl() {
+                return jarUrl;
+            }
+
+            @Override
+            public StereotipsProtocols getArchiverProtocol() {
+                return StereotipsProtocols.JAR;
+            }
+        }))return CompletableFuture.completedFuture(null);
+
         try(JarFile jarFile = new JarFile(jarUrl.getFile())) {
             Enumeration<JarEntry> entries = jarFile.entries();
             List<CompletableFuture<?>> localTasks = new ArrayList<>();

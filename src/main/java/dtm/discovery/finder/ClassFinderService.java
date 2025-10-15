@@ -1,31 +1,41 @@
 package dtm.discovery.finder;
 
 import java.io.File;
-import java.io.IOException;
-import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.jar.JarFile;
+import java.util.function.Predicate;
 
 import dtm.discovery.core.ClassFinder;
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.ClassFinderErrorHandler;
 import dtm.discovery.core.Processor;
+import dtm.discovery.stereotips.ClassFinderStereotips;
 
 public class ClassFinderService implements ClassFinder {
-    private ClassFinderErrorHandler handlers;
+    private ClassFinderErrorHandler errorHandlers;
+    private Predicate<ClassFinderStereotips> scanAcepptHandler;
     private final Set<Class<?>> classesLoaded;
 
     public ClassFinderService() {
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
 
-    public ClassFinderService(ClassFinderErrorHandler handlers) {
-        this.handlers = handlers;
+    public ClassFinderService(ClassFinderErrorHandler errorHandlers) {
+        this.errorHandlers = errorHandlers;
+        this.classesLoaded = ConcurrentHashMap.newKeySet();
+    }
+
+    public ClassFinderService(ClassFinderErrorHandler errorHandlers, Predicate<ClassFinderStereotips> scanAcepptHandler) {
+        this.errorHandlers = errorHandlers;
+        this.scanAcepptHandler = scanAcepptHandler;
+        this.classesLoaded = ConcurrentHashMap.newKeySet();
+    }
+
+    public ClassFinderService(Predicate<ClassFinderStereotips> scanAcepptHandler) {
+        this.scanAcepptHandler = scanAcepptHandler;
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
 
@@ -44,7 +54,7 @@ public class ClassFinderService implements ClassFinder {
                 try {
                     callingClass = Class.forName(callingClassName);
                 } catch (ClassNotFoundException e) {
-                    executeHandler(e);
+                    executeErrorHandler(e);
                 }
                 break;
             }
@@ -99,12 +109,12 @@ public class ClassFinderService implements ClassFinder {
         try{
             Processor processor = new SimpleDirectoryProcessor(rootDir, classes);
 
-            processor.onError(this::executeHandler);
+            processor.onError(this::executeErrorHandler);
             processor.execute();
 
             this.classesLoaded.addAll(classes);
         }catch (Exception e){
-            executeHandler(e);
+            executeErrorHandler(e);
         }
         return classes;
     }
@@ -116,7 +126,8 @@ public class ClassFinderService implements ClassFinder {
 
     @Override
     public void close() throws Exception {
-        handlers = null;
+        this.errorHandlers = null;
+        this.scanAcepptHandler = null;
         this.classesLoaded.clear();
     }
 
@@ -138,6 +149,18 @@ public class ClassFinderService implements ClassFinder {
 
                 tasks.add(CompletableFuture.runAsync(() -> {
                    try{
+                       if(!scanAcepptHandler.test(new ClassFinderStereotips() {
+                           @Override
+                           public URL getArchiverUrl() {
+                               return resource;
+                           }
+
+                           @Override
+                           public StereotipsProtocols getArchiverProtocol() {
+                               return ("jar".equalsIgnoreCase(protocol)) ? StereotipsProtocols.JAR : StereotipsProtocols.FILE;
+                           }
+                       })) return;
+
                        switch (protocol){
                            case "jar" -> {
                                if (jarProcessed.add(resource.getFile())) {
@@ -149,7 +172,8 @@ public class ClassFinderService implements ClassFinder {
                                             pacote,
                                             configurationsFinal
                                     );
-                                    processor.onError(this::executeHandler);
+                                    processor.onError(this::executeErrorHandler);
+                                    processor.acept(scanAcepptHandler);
                                     processor.execute();
                                }
                                break;
@@ -163,7 +187,8 @@ public class ClassFinderService implements ClassFinder {
                                        classes,
                                        configurationsFinal
                                );
-                               processor.onError(this::executeHandler);
+                               processor.onError(this::executeErrorHandler);
+                               processor.acept(scanAcepptHandler);
                                processor.execute();
                                break;
                            }
@@ -175,7 +200,7 @@ public class ClassFinderService implements ClassFinder {
                        throw new RuntimeException(e);
                    }
                 }, executorService).exceptionally(ex -> {
-                    executeHandler(ex);
+                    executeErrorHandler(ex);
                     return null;
                 }));
             }
@@ -183,12 +208,12 @@ public class ClassFinderService implements ClassFinder {
 
             if(atomicBoolean.get()){
                 Processor processor = new ClasspathProcessor(classes, jarProcessed, pacote, configurationsFinal);
-                processor.onError(this::executeHandler);
+                processor.onError(this::executeErrorHandler);
                 processor.execute();
             }
 
         } catch (Exception e) {
-            executeHandler(e);
+            executeErrorHandler(e);
         }
         classesLoaded.addAll(classes);
         return classes;
@@ -196,16 +221,19 @@ public class ClassFinderService implements ClassFinder {
 
     private ClassFinderConfigurations configureConfigurations(ClassFinderConfigurations configurations){
         if(configurations != null){
-            this.handlers = (configurations.getHandler() != null) ? configurations.getHandler() : (e) -> {};
+            this.errorHandlers = (configurations.getErrorHandler() != null) ? configurations.getErrorHandler() : (e) -> {};
+            this.scanAcepptHandler = (configurations.getAceptHandler() != null) ? configurations.getAceptHandler() : (e) -> true;
         }else{
-            this.handlers = (e) -> {};
+            this.errorHandlers = (e) -> {};
+            this.scanAcepptHandler = (e) -> true;
         }
+
         return (configurations != null) ? configurations : new ClassFinderConfigurations() {};
     }
 
-    private void executeHandler(Throwable th) {
-        if (this.handlers != null) {
-            this.handlers.onScanError(th);
+    private void executeErrorHandler(Throwable th) {
+        if (this.errorHandlers != null) {
+            this.errorHandlers.onScanError(th);
         }
     }
 

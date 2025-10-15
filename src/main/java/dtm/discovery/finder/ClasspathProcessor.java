@@ -2,6 +2,7 @@ package dtm.discovery.finder;
 
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
+import dtm.discovery.stereotips.ClassFinderStereotips;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
@@ -19,6 +21,7 @@ public class ClasspathProcessor implements Processor {
     private final Set<Class<?>> processedClasses;
     private final Set<String> jarProcessed;
     private final ClassFinderConfigurations configurations;
+    private Predicate<ClassFinderStereotips> acept;
     private final String classpath;
     private final String packageName;
 
@@ -52,6 +55,7 @@ public class ClasspathProcessor implements Processor {
                 URL jarUrl = file.toURI().toURL();
                 Processor processor = new JarProcessor(jarUrl, processedClasses, jarProcessed, packageName, configurations);
                 processor.onError(errorAction);
+                processor.acept(acept);
                 processor.execute();
             }
         }
@@ -60,6 +64,11 @@ public class ClasspathProcessor implements Processor {
     @Override
     public void onError(Consumer<Throwable> action) {
         if(action != null) this.errorAction = action;
+    }
+
+    @Override
+    public void acept(Predicate<ClassFinderStereotips> acept) {
+        this.acept = (acept != null) ? acept : (e) -> true;
     }
 
     private boolean ignore(String jarPath){

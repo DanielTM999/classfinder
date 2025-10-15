@@ -1,9 +1,11 @@
 package dtm.discovery.finder;
 
 import dtm.discovery.core.Processor;
+import dtm.discovery.stereotips.ClassFinderStereotips;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
@@ -13,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public class SimpleDirectoryProcessor implements Processor {
 
@@ -20,6 +23,7 @@ public class SimpleDirectoryProcessor implements Processor {
     private final ExecutorService executor;
     private final Set<Class<?>> processedClasses;
     private Consumer<Throwable> errorAction = e -> {};
+    private Predicate<ClassFinderStereotips> acept;
 
     public SimpleDirectoryProcessor(File root, Set<Class<?>> processedClasses) {
         this.root = root;
@@ -44,8 +48,28 @@ public class SimpleDirectoryProcessor implements Processor {
         if(action != null) this.errorAction = action;
     }
 
+    @Override
+    public void acept(Predicate<ClassFinderStereotips> acept) {
+        this.acept = (acept != null) ? acept : (e) -> true;
+    }
+
     private void search(File[] files, List<CompletableFuture<Void>> tasks){
         for (File file : files){
+            if(!acept.test(new ClassFinderStereotips() {
+                @Override
+                public URL getArchiverUrl() {
+                    try {
+                        return file.toURI().toURL();
+                    } catch (MalformedURLException e) {
+                       return null;
+                    }
+                }
+
+                @Override
+                public StereotipsProtocols getArchiverProtocol() {
+                    return StereotipsProtocols.FILE;
+                }
+            })) continue;
             if (file.isDirectory()) {
                 search(file.listFiles(), tasks);
             } else {
