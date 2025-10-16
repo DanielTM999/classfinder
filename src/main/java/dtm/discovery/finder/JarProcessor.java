@@ -3,8 +3,6 @@ package dtm.discovery.finder;
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
 import dtm.discovery.stereotips.ClassFinderStereotips;
-
-import java.io.File;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -18,6 +16,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 public class JarProcessor implements Processor {
 
@@ -90,6 +89,7 @@ public class JarProcessor implements Processor {
                         if (entryName.regionMatches(true, 0, "META-INF/versions/", 0, "META-INF/versions/".length()) || entryName.endsWith("module-info.class")) {
                             return;
                         }
+
                         if((entryName.startsWith(pacote.replace('.', '/')) || configurations.getAllElements()) && entryName.endsWith(".class")) {
                             String className = entryName.replace('/', '.').replace(".class", "");
                             if (!ignore(className)) {
@@ -104,6 +104,7 @@ public class JarProcessor implements Processor {
                             if (!configurations.ignoreSubJars() || (ismainJar && !configurations.ignoreMainJar())) {
                                 String jarInternalPath = "jar:file:" + jarUrl.getFile().replace("\\", "/") + "!/" + entryName;
                                 String decodedPath = URLDecoder.decode(jarInternalPath, StandardCharsets.UTF_8);
+
                                 if (ignoreJar(decodedPath, ismainJar)) return;
                                 URL jarUrlInternal = URI.create(decodedPath).toURL();
                                 String jarKey = jarUrlInternal.toExternalForm();
@@ -121,10 +122,10 @@ public class JarProcessor implements Processor {
             }
 
 
-            return CompletableFuture.allOf(
-                    CompletableFuture.allOf(localTasks.toArray(new CompletableFuture[0])),
-                    CompletableFuture.allOf(subJarFutures.toArray(new CompletableFuture[0]))
-            );
+            CompletableFuture<?>[] all = Stream.concat(localTasks.stream(), subJarFutures.stream())
+                    .toArray(CompletableFuture[]::new);
+            return CompletableFuture.allOf(all);
+
         } catch (Exception e) {
             errorAction.accept(e);
             return CompletableFuture.completedFuture(null);
