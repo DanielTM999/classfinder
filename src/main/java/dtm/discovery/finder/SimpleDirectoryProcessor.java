@@ -10,8 +10,10 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -21,11 +23,11 @@ public class SimpleDirectoryProcessor implements Processor {
 
     private final File root;
     private final ExecutorService executor;
-    private final Set<Class<?>> processedClasses;
+    private final Map<File, Set<Class<?>>> processedClasses;
     private Consumer<Throwable> errorAction = e -> {};
     private Predicate<ClassFinderStereotips> acept;
 
-    public SimpleDirectoryProcessor(File root, Set<Class<?>> processedClasses) {
+    public SimpleDirectoryProcessor(File root,  Map<File, Set<Class<?>>> processedClasses) {
         this.root = root;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         this.processedClasses = processedClasses;
@@ -67,7 +69,9 @@ public class SimpleDirectoryProcessor implements Processor {
 
                 @Override
                 public StereotipsProtocols getArchiverProtocol() {
-                    return StereotipsProtocols.FILE;
+                    if(file.isDirectory()) return StereotipsProtocols.DIR;
+                    String path = file.getName();
+                    return (file.isFile() && path.endsWith(".jar")) ? StereotipsProtocols.JAR : StereotipsProtocols.FILE;
                 }
             })) continue;
             if (file.isDirectory()) {
@@ -86,6 +90,7 @@ public class SimpleDirectoryProcessor implements Processor {
            try{
                Processor processor = new SimpleJarProcessor(processedClasses, file);
                processor.onError(errorAction);
+               processor.acept(acept);
                processor.execute();
            }catch (Exception e){
                errorAction.accept(e);
@@ -103,11 +108,11 @@ public class SimpleDirectoryProcessor implements Processor {
             for(String className : classNames){
                 try {
                     Class<?> clazz = Class.forName(className, false, getClass().getClassLoader());
-                    this.processedClasses.add(clazz);
+                    addToProcessedClasses(rootDir, clazz);
                 } catch (ClassNotFoundException e) {
                     try(URLClassLoader classLoader = getClassLoaderForFile(file)) {
                         Class<?> clazz = classLoader.loadClass(className);
-                        this.processedClasses.add(clazz);
+                        addToProcessedClasses(rootDir, clazz);
                     }catch(ClassNotFoundException | NoClassDefFoundError ignored){}
                 }
             }
@@ -144,4 +149,9 @@ public class SimpleDirectoryProcessor implements Processor {
         URL url = parentDir.toURI().toURL();
         return new URLClassLoader(new URL[]{url}, getClass().getClassLoader());
     }
+
+    private void addToProcessedClasses(File rootDir, Class<?> clazz) {
+        this.processedClasses.computeIfAbsent(rootDir, k -> ConcurrentHashMap.newKeySet()).add(clazz);
+    }
+
 }

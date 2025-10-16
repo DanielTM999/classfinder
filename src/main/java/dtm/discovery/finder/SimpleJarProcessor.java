@@ -23,7 +23,7 @@ import java.util.jar.JarFile;
 
 public class SimpleJarProcessor implements Processor {
 
-    private final Set<Class<?>> processedClasses;
+    private final Map<File, Set<Class<?>>> processedClasses;
     private final ExecutorService executorService;
     private final File jarFile;
     private final ClassFinderConfigurations configurations;
@@ -33,7 +33,7 @@ public class SimpleJarProcessor implements Processor {
     private final List<URLClassLoader> classLoadersToClose = Collections.synchronizedList(new ArrayList<>());
 
 
-    public SimpleJarProcessor(Set<Class<?>> processedClasses, File jarFile) {
+    public SimpleJarProcessor(Map<File, Set<Class<?>>> processedClasses, File jarFile) {
         this.processedClasses = processedClasses;
         this.jarFile = jarFile;
         this.executorService = Executors.newVirtualThreadPerTaskExecutor();
@@ -41,7 +41,7 @@ public class SimpleJarProcessor implements Processor {
         this.jarProcessed = ConcurrentHashMap.newKeySet();
     }
 
-    public SimpleJarProcessor(Set<Class<?>> processedClasses, File jarFile, ClassFinderConfigurations configurations) {
+    public SimpleJarProcessor(Map<File, Set<Class<?>>> processedClasses, File jarFile, ClassFinderConfigurations configurations) {
         this.processedClasses = processedClasses;
         this.jarFile = jarFile;
         this.executorService = Executors.newVirtualThreadPerTaskExecutor();
@@ -175,13 +175,13 @@ public class SimpleJarProcessor implements Processor {
         if(configurations != null){
             if (this.configurations.getFilterByAnnotation() != null) {
                 if (clazz.isAnnotationPresent(this.configurations.getFilterByAnnotation())) {
-                    processedClasses.add(clazz);
+                    addToProcessedClasses(jarFile, clazz);
                 }
             } else {
-                processedClasses.add(clazz);
+                addToProcessedClasses(jarFile, clazz);
             }
         }else{
-            processedClasses.add(clazz);
+            addToProcessedClasses(jarFile, clazz);
         }
 
     }
@@ -194,6 +194,10 @@ public class SimpleJarProcessor implements Processor {
     private boolean getIgnoreSubJars(){
         if(configurations == null) return true;
         return configurations.ignoreSubJars();
+    }
+
+    private void addToProcessedClasses(File rootDir, Class<?> clazz) {
+        this.processedClasses.computeIfAbsent(rootDir, k -> ConcurrentHashMap.newKeySet()).add(clazz);
     }
 
 }

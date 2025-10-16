@@ -105,18 +105,47 @@ public class ClassFinderService implements ClassFinder {
     @Override
     public Set<Class<?>> loadByDirectory(String path, ClassFinderConfigurations configurations) {
         File rootDir = new File(path);
-        Set<Class<?>> classes = ConcurrentHashMap.newKeySet();
+        Map<File, Set<Class<?>>> classesMap = new ConcurrentHashMap<>();
+        Set<Class<?>> classesSet = ConcurrentHashMap.newKeySet();
         try{
-            Processor processor = new SimpleDirectoryProcessor(rootDir, classes);
+            configureConfigurations(configurations);
+            Processor processor = new SimpleDirectoryProcessor(rootDir, classesMap);
 
             processor.onError(this::executeErrorHandler);
+            processor.acept((configurations != null) ? configurations.getAceptHandler() : null);
             processor.execute();
+            classesMap.values().forEach(classesSet::addAll);
 
-            this.classesLoaded.addAll(classes);
+            this.classesLoaded.addAll(classesSet);
         }catch (Exception e){
             executeErrorHandler(e);
         }
-        return classes;
+        return classesSet;
+    }
+
+    @Override
+    public Map<File, Set<Class<?>>> loadGroupedByDirectory(String path) {
+        return loadGroupedByDirectory(path, null);
+    }
+
+    @Override
+    public Map<File, Set<Class<?>>> loadGroupedByDirectory(String path, ClassFinderConfigurations configurations) {
+        File rootDir = new File(path);
+        Map<File, Set<Class<?>>> classesMap = new ConcurrentHashMap<>();
+        try{
+            configureConfigurations(configurations);
+            Processor processor = new SimpleDirectoryProcessor(rootDir, classesMap);
+
+            processor.onError(this::executeErrorHandler);
+            processor.acept((configurations != null) ? configurations.getAceptHandler() : null);
+            processor.execute();
+
+            classesMap.values().forEach(this.classesLoaded::addAll);
+        }catch (Exception e){
+            executeErrorHandler(e);
+        }
+
+        return classesMap;
     }
 
     @Override

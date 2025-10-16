@@ -1,5 +1,8 @@
 package dtm.discovery.core;
 
+import java.io.File;
+import java.net.URL;
+import java.util.Map;
 import java.util.Set;
 
 public interface ClassFinder extends AutoCloseable {
@@ -14,6 +17,9 @@ public interface ClassFinder extends AutoCloseable {
 
     Set<Class<?>> loadByDirectory(String path);
     Set<Class<?>> loadByDirectory(String path, ClassFinderConfigurations configurations);
+
+    Map<File, Set<Class<?>>> loadGroupedByDirectory(String path);
+    Map<File, Set<Class<?>>> loadGroupedByDirectory(String path, ClassFinderConfigurations configurations);
 
     Set<Class<?>> getLoadedClasses();
 }

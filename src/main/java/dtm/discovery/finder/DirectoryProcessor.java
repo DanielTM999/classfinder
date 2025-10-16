@@ -78,10 +78,12 @@ public class DirectoryProcessor implements Processor {
                             }
                         }
 
-                        @Override
-                        public StereotipsProtocols getArchiverProtocol() {
-                            return StereotipsProtocols.FILE;
-                        }
+                            @Override
+                            public StereotipsProtocols getArchiverProtocol() {
+                                if(file.isDirectory()) return StereotipsProtocols.DIR;
+                                String path = file.getName();
+                                return (file.isFile() && path.endsWith(".jar")) ? StereotipsProtocols.JAR : StereotipsProtocols.FILE;
+                            }
                     })) return;
 
                         if (file.isFile() && file.getName().endsWith(".class")) {

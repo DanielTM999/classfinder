@@ -6,8 +6,9 @@ public interface ClassFinderStereotips {
     URL getArchiverUrl();
     StereotipsProtocols getArchiverProtocol();
 
-    enum StereotipsProtocols{
+    enum StereotipsProtocols {
         FILE,
-        JAR
+        JAR,
+        DIR
     }
 }
