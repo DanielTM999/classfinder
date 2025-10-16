@@ -84,8 +84,12 @@ public class JarProcessor implements Processor {
             while (entries.hasMoreElements()) {
                 final JarEntry entry = entries.nextElement();
                 final String entryName = entry.getName();
+
                 CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
                     try {
+                        if (entryName.regionMatches(true, 0, "META-INF/versions/", 0, "META-INF/versions/".length()) || entryName.endsWith("module-info.class")) {
+                            return;
+                        }
                         if((entryName.startsWith(pacote.replace('.', '/')) || configurations.getAllElements()) && entryName.endsWith(".class")) {
                             String className = entryName.replace('/', '.').replace(".class", "");
                             if (!ignore(className)) {

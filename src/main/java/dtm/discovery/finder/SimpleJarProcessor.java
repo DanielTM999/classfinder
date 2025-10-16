@@ -102,6 +102,10 @@ public class SimpleJarProcessor implements Processor {
 
                 CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
                     try {
+                        if (entryName.regionMatches(true, 0, "META-INF/versions/", 0, "META-INF/versions/".length()) || entryName.endsWith("module-info.class")) {
+                            return;
+                        }
+
                         if(entryName.endsWith(".class")) {
                             String className = entryName.replace('/', '.').replace(".class", "");
                             processClass(className, classLoader);
