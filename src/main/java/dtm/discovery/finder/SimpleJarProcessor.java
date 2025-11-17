@@ -11,6 +11,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -88,7 +89,7 @@ public class SimpleJarProcessor implements Processor {
             }
         }))return CompletableFuture.completedFuture(null);
         try(
-                JarFile jarFile = new JarFile(jarUrl.getFile());
+                JarFile jarFile = new JarFile(Paths.get(jarUrl.toURI()).toFile())
         ){
             URLClassLoader classLoader = URLClassLoader.newInstance(new URL[] { jarUrl });
             classLoadersToClose.add(classLoader);

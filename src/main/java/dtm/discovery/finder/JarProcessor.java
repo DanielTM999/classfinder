@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -75,7 +76,7 @@ public class JarProcessor implements Processor {
             }
         }))return CompletableFuture.completedFuture(null);
 
-        try(JarFile jarFile = new JarFile(jarUrl.getFile())) {
+        try(JarFile jarFile = new JarFile(Paths.get(jarUrl.toURI()).toFile())) {
             Enumeration<JarEntry> entries = jarFile.entries();
             List<CompletableFuture<?>> localTasks = new ArrayList<>();
             List<CompletableFuture<?>> subJarFutures = new ArrayList<>();
