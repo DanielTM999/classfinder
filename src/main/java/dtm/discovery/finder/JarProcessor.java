@@ -9,10 +9,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.jar.JarEntry;
@@ -48,9 +45,15 @@ public class JarProcessor implements Processor {
 
     @Override
     public void execute() throws Exception{
-        CompletableFuture<Void> future = encontrarClassesNoPacoteDentroDoJar(jarUrl, packageName, true);
-        future.join();
-        executorService.shutdown();
+        try {
+            CompletableFuture<Void> future = encontrarClassesNoPacoteDentroDoJar(jarUrl, packageName, true);
+            future.join();
+        } finally {
+            executorService.shutdown();
+            if (!executorService.awaitTermination(1, TimeUnit.MINUTES)) {
+                executorService.shutdownNow();
+            }
+        }
     }
 
     @Override
@@ -123,14 +126,13 @@ public class JarProcessor implements Processor {
             }
 
 
-            CompletableFuture<?>[] all = Stream.concat(localTasks.stream(), subJarFutures.stream())
-                    .toArray(CompletableFuture[]::new);
-            return CompletableFuture.allOf(all);
-
+            CompletableFuture.allOf(localTasks.toArray(new CompletableFuture[0])).join();
         } catch (Exception e) {
             errorAction.accept(e);
             return CompletableFuture.completedFuture(null);
         }
+
+        return CompletableFuture.completedFuture(null);
     }
 
 
@@ -149,10 +151,12 @@ public class JarProcessor implements Processor {
             Class<?> clazz = null;
             try {
                 return Class.forName(className, false, Thread.currentThread().getContextClassLoader());
-            } catch (Throwable e) {
+            } catch (ClassNotFoundException | LinkageError ignored){
+
+            } catch (Exception e) {
                 errorAction.accept(e);
             }
-        } catch (Throwable e) {
+        } catch (Exception e) {
             errorAction.accept(e);
         }
         return null;
