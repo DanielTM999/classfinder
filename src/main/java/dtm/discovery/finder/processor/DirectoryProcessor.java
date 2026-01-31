@@ -1,11 +1,10 @@
-package dtm.discovery.finder;
+package dtm.discovery.finder.processor;
 
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
 import dtm.discovery.stereotips.ClassFinderStereotips;
 
 import java.io.File;
-import java.lang.annotation.Annotation;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;

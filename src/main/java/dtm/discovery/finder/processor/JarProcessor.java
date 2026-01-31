@@ -1,4 +1,4 @@
-package dtm.discovery.finder;
+package dtm.discovery.finder.processor;
 
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.Processor;
@@ -14,7 +14,6 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-import java.util.stream.Stream;
 
 public class JarProcessor implements Processor {
 

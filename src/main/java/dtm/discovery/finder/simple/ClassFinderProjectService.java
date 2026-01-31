@@ -1,44 +1,45 @@
-package dtm.discovery.finder;
-
-import java.io.File;
-import java.net.URI;
-import java.net.URL;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
+package dtm.discovery.finder.simple;
 
 import dtm.discovery.core.ClassFinder;
 import dtm.discovery.core.ClassFinderConfigurations;
 import dtm.discovery.core.ClassFinderErrorHandler;
 import dtm.discovery.core.Processor;
-import dtm.discovery.finder.processor.ClasspathProcessor;
-import dtm.discovery.finder.processor.DirectoryProcessor;
-import dtm.discovery.finder.processor.JarProcessor;
-import dtm.discovery.finder.processor.SimpleDirectoryProcessor;
+import dtm.discovery.finder.processor.*;
 import dtm.discovery.stereotips.ClassFinderStereotips;
 
-public class ClassFinderService implements ClassFinder {
+import java.io.File;
+import java.net.URI;
+import java.net.URL;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
+
+public class ClassFinderProjectService implements ClassFinder {
+
     private ClassFinderErrorHandler errorHandlers;
     private Predicate<ClassFinderStereotips> scanAcepptHandler;
     private final Set<Class<?>> classesLoaded;
 
-    public ClassFinderService() {
+    public ClassFinderProjectService() {
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
 
-    public ClassFinderService(ClassFinderErrorHandler errorHandlers) {
+    public ClassFinderProjectService(ClassFinderErrorHandler errorHandlers) {
         this.errorHandlers = errorHandlers;
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
 
-    public ClassFinderService(ClassFinderErrorHandler errorHandlers, Predicate<ClassFinderStereotips> scanAcepptHandler) {
+    public ClassFinderProjectService(ClassFinderErrorHandler errorHandlers, Predicate<ClassFinderStereotips> scanAcepptHandler) {
         this.errorHandlers = errorHandlers;
         this.scanAcepptHandler = scanAcepptHandler;
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
 
-    public ClassFinderService(Predicate<ClassFinderStereotips> scanAcepptHandler) {
+    public ClassFinderProjectService(Predicate<ClassFinderStereotips> scanAcepptHandler) {
         this.scanAcepptHandler = scanAcepptHandler;
         this.classesLoaded = ConcurrentHashMap.newKeySet();
     }
@@ -164,6 +165,7 @@ public class ClassFinderService implements ClassFinder {
         this.classesLoaded.clear();
     }
 
+
     private Set<Class<?>> encontrarClassesNoPacote(String pacote, ClassFinderConfigurations configurations) {
         final ClassFinderConfigurations configurationsFinal = configureConfigurations(configurations);
         AtomicBoolean atomicBoolean = new AtomicBoolean(false);
@@ -181,62 +183,47 @@ public class ClassFinderService implements ClassFinder {
                 final String protocol = resource.getProtocol();
 
                 tasks.add(CompletableFuture.runAsync(() -> {
-                   try{
-                       if(!scanAcepptHandler.test(new ClassFinderStereotips() {
-                           @Override
-                           public URL getArchiverUrl() {
-                               return resource;
-                           }
-
-                           @Override
-                           public StereotipsProtocols getArchiverProtocol() {
-                               return ("jar".equalsIgnoreCase(protocol)) ? StereotipsProtocols.JAR : StereotipsProtocols.FILE;
-                           }
-                       })) return;
-
-                       switch (protocol){
-                           case "jar" -> {
-                               if (jarProcessed.add(resource.getFile())) {
+                    try{
+                        switch (protocol){
+                            case "jar" -> {
+                                if (jarProcessed.add(resource.getFile())) {
                                     URL jarUrl = getJarByUrl(resource);
-                                    Processor processor = new JarProcessor(
+                                    Processor processor = new FastProjectJarProcessor(
                                             jarUrl,
                                             classes,
-                                            jarProcessed,
                                             pacote,
                                             configurationsFinal
                                     );
                                     processor.onError(this::executeErrorHandler);
                                     processor.acept(scanAcepptHandler);
                                     processor.execute();
-                               }
-                               break;
-                           }
-                           case "file" -> {
-                               atomicBoolean.set(true);
-                               File directory = new File(resource.getFile());
-                               Processor processor = new DirectoryProcessor(
-                                       directory,
-                                       pacote,
-                                       classes,
-                                       configurationsFinal
-                               );
-                               processor.onError(this::executeErrorHandler);
-                               processor.acept(scanAcepptHandler);
-                               processor.execute();
-                               break;
-                           }
-                           default -> {
-                               break;
-                           }
-                       }
-                   }catch (Exception e){
-                       throw new RuntimeException(e);
-                   }
+                                }
+                                break;
+                            }
+                            case "file" -> {
+                                atomicBoolean.set(true);
+                                File directory = new File(resource.getFile());
+                                Processor processor = new DirectoryProcessor(
+                                        directory,
+                                        pacote,
+                                        classes,
+                                        configurationsFinal
+                                );
+                                processor.onError(this::executeErrorHandler);
+                                processor.acept(scanAcepptHandler);
+                                processor.execute();
+                                break;
+                            }
+                        }
+                    }catch (Exception e){
+                        throw new RuntimeException(e);
+                    }
                 }, executorService).exceptionally(ex -> {
                     executeErrorHandler(ex);
                     return null;
                 }));
             }
+
             CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
 
             if(atomicBoolean.get()){
@@ -244,8 +231,7 @@ public class ClassFinderService implements ClassFinder {
                 processor.onError(this::executeErrorHandler);
                 processor.execute();
             }
-
-        } catch (Exception e) {
+        }catch (Exception e) {
             executeErrorHandler(e);
         }
         classesLoaded.addAll(classes);

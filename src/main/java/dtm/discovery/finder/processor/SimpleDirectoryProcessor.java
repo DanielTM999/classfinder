@@ -1,4 +1,4 @@
-package dtm.discovery.finder;
+package dtm.discovery.finder.processor;
 
 import dtm.discovery.core.Processor;
 import dtm.discovery.stereotips.ClassFinderStereotips;
