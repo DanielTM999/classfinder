@@ -40,8 +40,12 @@ public class FastProjectJarProcessor implements Processor {
         this.processedClasses = processedClasses;
         this.configurations = configurations;
         this.packageName = packageName;
-        this.packagePath = packageName != null ? packageName.replace('.', '/') : "";
         this.executorService = Executors.newVirtualThreadPerTaskExecutor();
+        String path = packageName.replace('.', '/');
+        if (!path.endsWith("/")) {
+            path += "/";
+        }
+        this.packagePath = path;
     }
 
 
