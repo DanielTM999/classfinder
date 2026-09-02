@@ -24,6 +24,7 @@ public class SimpleDirectoryProcessor implements Processor {
     private final File root;
     private final ExecutorService executor;
     private final Map<File, Set<Class<?>>> processedClasses;
+    private final Map<File, URLClassLoader> fallbackClassLoaders = new ConcurrentHashMap<>();
     private Consumer<Throwable> errorAction = e -> {};
     private Predicate<ClassFinderStereotips> acept;
 
@@ -37,12 +38,27 @@ public class SimpleDirectoryProcessor implements Processor {
     public void execute() throws Exception {
         List<CompletableFuture<Void>> allTasks = new ArrayList<>();
 
-        if (root.exists() && root.isDirectory()) {
-            search(root.listFiles(), allTasks);
-        }
+        try {
+            if (root.exists() && root.isDirectory()) {
+                search(root.listFiles(), allTasks);
+            }
 
-        CompletableFuture.allOf(allTasks.toArray(new CompletableFuture[0])).join();
-        executor.shutdown();
+            CompletableFuture.allOf(allTasks.toArray(new CompletableFuture[0])).join();
+        } finally {
+            executor.shutdown();
+            closeFallbackClassLoaders();
+        }
+    }
+
+    private void closeFallbackClassLoaders() {
+        for (URLClassLoader classLoader : fallbackClassLoaders.values()) {
+            try {
+                classLoader.close();
+            } catch (IOException e) {
+                errorAction.accept(e);
+            }
+        }
+        fallbackClassLoaders.clear();
     }
 
     @Override
@@ -110,8 +126,8 @@ public class SimpleDirectoryProcessor implements Processor {
                     Class<?> clazz = Class.forName(className, false, getClass().getClassLoader());
                     addToProcessedClasses(rootDir, clazz);
                 } catch (ClassNotFoundException e) {
-                    try(URLClassLoader classLoader = getClassLoaderForFile(file)) {
-                        Class<?> clazz = classLoader.loadClass(className);
+                    try {
+                        Class<?> clazz = getClassLoaderForFile(file).loadClass(className);
                         addToProcessedClasses(rootDir, clazz);
                     }catch(ClassNotFoundException | NoClassDefFoundError ignored){}
                 }
@@ -143,11 +159,28 @@ public class SimpleDirectoryProcessor implements Processor {
         return names;
     }
 
+    /**
+     * Um unico URLClassLoader por diretorio, reaproveitado entre as tentativas e entre os
+     * arquivos daquele diretorio. Antes era criado (e fechado) um classloader por tentativa
+     * de nome, o que dava O(profundidade) classloaders por classe.
+     */
     private URLClassLoader getClassLoaderForFile(File file) throws IOException {
         File parentDir = file.getParentFile();
-        if (parentDir == null) throw new IOException("Diretório pai inválido.");
+        if (parentDir == null) throw new IOException("Diretorio pai invalido.");
+
+        URLClassLoader cached = fallbackClassLoaders.get(parentDir);
+        if (cached != null) return cached;
+
         URL url = parentDir.toURI().toURL();
-        return new URLClassLoader(new URL[]{url}, getClass().getClassLoader());
+        URLClassLoader created = new URLClassLoader(new URL[]{url}, getClass().getClassLoader());
+
+        URLClassLoader previous = fallbackClassLoaders.putIfAbsent(parentDir, created);
+        if (previous != null) {
+            created.close();
+            return previous;
+        }
+
+        return created;
     }
 
     private void addToProcessedClasses(File rootDir, Class<?> clazz) {

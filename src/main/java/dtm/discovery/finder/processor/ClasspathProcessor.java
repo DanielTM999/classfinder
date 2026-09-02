@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 public class ClasspathProcessor implements Processor {
 
@@ -38,12 +39,12 @@ public class ClasspathProcessor implements Processor {
 
     @Override
     public void execute() throws Exception{
-        List<String> jarPaths = Arrays.stream(classpath.split(";"))
+        if(configurations.ignoreSubJars()) return;
+
+        List<String> jarPaths = Arrays.stream(classpath.split(Pattern.quote(File.pathSeparator)))
                 .filter(pathJar -> pathJar.endsWith(".jar"))
                 .filter(jarPath -> !ignore(jarPath))
                 .toList();
-
-        if(configurations.ignoreSubJars()) return;
 
         for (String jarPath : jarPaths){
             if(jarProcessed.add(jarPath)){
