@@ -10,9 +10,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -25,7 +22,6 @@ public class DirectoryProcessor implements Processor {
     private final String packageName;
     private final Set<Class<?>> processedClasses;
     private final ClassFinderConfigurations configurations;
-    private final ExecutorService executorService;
     private Consumer<Throwable> errorAction = e -> {};
     private Predicate<ClassFinderStereotips> acept;
 
@@ -39,20 +35,15 @@ public class DirectoryProcessor implements Processor {
         this.packageName = packageName;
         this.processedClasses = processedClasses;
         this.configurations = configurations;
-        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Override
     public void execute() throws Exception{
         if (root == null || !root.isDirectory()) return;
 
-        try {
-            List<String> classNames = new ArrayList<>();
-            collect(root, packageName, classNames);
-            loadAll(classNames);
-        } finally {
-            executorService.shutdown();
-        }
+        List<String> classNames = new ArrayList<>();
+        collect(root, packageName, classNames);
+        loadAll(classNames);
     }
 
     @Override
@@ -65,11 +56,6 @@ public class DirectoryProcessor implements Processor {
         this.acept = (acept != null) ? acept : (e) -> true;
     }
 
-    /**
-     * Percorre a arvore uma unica vez, sequencialmente, apenas montando a lista de nomes de
-     * classe. O IO de diretorio e barato e serial; o custo real esta no carregamento, que
-     * acontece depois em um unico lote paralelo.
-     */
     private void collect(File directory, String pacote, List<String> classNames){
         File[] files = directory.listFiles();
         if (files == null) return;
@@ -106,13 +92,8 @@ public class DirectoryProcessor implements Processor {
             return;
         }
 
-        List<CompletableFuture<Void>> futures = new ArrayList<>(classNames.size());
-        for (String className : classNames) {
-            futures.add(CompletableFuture.runAsync(() -> load(className, classLoader), executorService));
-        }
-
         try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            classNames.parallelStream().forEach(className -> load(className, classLoader));
         } catch (Exception e) {
             errorAction.accept(e);
         }

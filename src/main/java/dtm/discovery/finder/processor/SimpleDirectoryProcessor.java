@@ -159,11 +159,6 @@ public class SimpleDirectoryProcessor implements Processor {
         return names;
     }
 
-    /**
-     * Um unico URLClassLoader por diretorio, reaproveitado entre as tentativas e entre os
-     * arquivos daquele diretorio. Antes era criado (e fechado) um classloader por tentativa
-     * de nome, o que dava O(profundidade) classloaders por classe.
-     */
     private URLClassLoader getClassLoaderForFile(File file) throws IOException {
         File parentDir = file.getParentFile();
         if (parentDir == null) throw new IOException("Diretorio pai invalido.");
